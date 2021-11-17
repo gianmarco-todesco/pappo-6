@@ -88,11 +88,11 @@ class Dot {
         this.name = name;
     }
     create(snap) {
-        let dot = this.dot = snap.circle(this.x,this.y,10);
+        let dot = this.dot = snap.circle(this.x,this.y,4);
         dot.attr({
             fill: "#bada55",
             stroke: "#000",
-            strokeWidth: 2
+            strokeWidth: 1
         }).mouseover(function() {
             this.animate({
                 fill: "#ff0000"
@@ -140,6 +140,7 @@ function getLine(lineShape) {
 let permIndex = 0;
 let lines = [];
 let pappusLines = [];
+let intersections = [];
     
 window.addEventListener('DOMContentLoaded', () => {
     snap = Snap("#svg");
@@ -155,6 +156,14 @@ window.addEventListener('DOMContentLoaded', () => {
             visibility:'hidden'
         });
         lines.push(line);
+    }
+    for(let i=0; i<36; i++) {
+        let pt = snap.circle(0,0,1.5).attr({
+            fill:'#000',
+            stroke:'none',
+            visibility:'hidden'
+        });
+        intersections.push(pt);
     }
     for(let i=0; i<9; i++) {
         let line = snap.line(0,0,10,10).attr({
@@ -181,17 +190,6 @@ window.addEventListener('DOMContentLoaded', () => {
     [pA,pC,pD,pF].forEach(p => {
         p.onDrag = (x,y) => { p.setPos(x,y); update(); };
     })
-    /*
-    bounds = new Rectangle(50,50,750,750);
-    bounds.create(snap);
-    
-
-    line1 = new Line(pA,pB,pC, bounds);
-    line2 = new Line(pD,pE,pF, bounds);
-
-    [line1,line2,pA,pB,pC,pD,pE,pF].forEach(p=>p.create(snap));
-
-    */
     
 });
 
@@ -207,27 +205,54 @@ function update() {
     updateMidPoint(pB,pA,pC);
     updateMidPoint(pE,pD,pF);
     
+    let pts = [pA,pB,pC,pD,pE,pF];
+    for(let i=0; i<3; i++) {
+        for(let j=3; j<6; j++) {
+            updateLineShape(lines[i*3+j-3], pts[i], pts[j]);            
+        }
+    }
 
-    let pp = [pD,pE,pF];
+    let intersectionTable = {}
+    let k = 0;
+    for(let i=0; i<8; i++) {
+        for(let j=i+1; j<9; j++) {
+            let p = segmentIntersection(
+                getLine(lines[i]),
+                getLine(lines[j]));
+            // console.log(i,j,p);
+            if(p) {
+                intersections[k].attr({
+                    'visibility':'visible',
+                    'cx':p.x,
+                    'cy':p.y
+                });
+            } else {
+                intersections[k].attr({
+                    'visibility':'hidden'
+                });
+            }
+            k++;
+            intersectionTable[i*9+j] = 
+            intersectionTable[j*9+i] = p;
+        }
+    }
+
     let perms = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
-
-    let perm = perms[permIndex];
-    updateLineShape(lines[0], pA,pp[perm[1]]);
-    updateLineShape(lines[1], pB,pp[perm[0]]);
-    updateLineShape(lines[2], pB,pp[perm[2]]);
-    updateLineShape(lines[3], pC,pp[perm[1]]);
-    updateLineShape(lines[4], pA,pp[perm[2]]);
-    updateLineShape(lines[5], pC,pp[perm[0]]);    
-    
-    let p1 = segmentIntersection(
-        getLine(lines[0]),
-        getLine(lines[1]));
-    let p2 = segmentIntersection(
-        getLine(lines[4]),
-        getLine(lines[5]));
-    console.log(p1,p2);
-    if(p1 != null && p2 != null) {
-        updateLineShape(pappusLines[0],p1,p2);
+    for(let i=0;i<6; i++) {
+        let perm = perms[i];
+        let L = []; // lines indices
+        for(let j=0; j<6; j++) {
+            let a = [0,1,1,2,0,2][j];
+            let b = perm[[1,0,2,1,2,0][j]];
+            L.push(a*3+b);
+        }
+        let p1 = intersectionTable[L[0]*9+L[1]];
+        let p2 = intersectionTable[L[4]*9+L[5]];
+        if(p1 != null && p2 != null) {
+            updateLineShape(pappusLines[i],p1,p2);
+        } else {
+            pappusLines[i].attr('visibility','hidden');
+        }        
     }
     
 }
