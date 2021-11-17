@@ -141,12 +141,17 @@ let permIndex = 0;
 let lines = [];
 let pappusLines = [];
 let intersections = [];
-    
+
 window.addEventListener('DOMContentLoaded', () => {
     snap = Snap("#svg");
 
-    bounds = {x:10,y:10,w:780,h:780};
-    makeRectangle(snap, bounds);
+    bounds = {x:0,y:0,w:snap.node.clientWidth,h:snap.node.clientHeight};
+    window.addEventListener('resize', ()=> {
+        bounds = {x:0,y:0,w:snap.node.clientWidth,h:snap.node.clientHeight};
+        update();
+    });
+    // makeRectangle(snap, bounds);
+
     line1 = snap.line(0,0,10,10).attr({stroke:'#000',lineWidth:1});
     line2 = snap.line(0,0,10,10).attr({stroke:'#000',lineWidth:1});
     for(let i=0; i<36; i++) {
@@ -200,6 +205,7 @@ function updateMidPoint(p,pa,pb) {
 }
 
 function update() {
+    
     updateLineShape(line1, pA,pC);
     updateLineShape(line2, pD,pF);
     updateMidPoint(pB,pA,pC);
