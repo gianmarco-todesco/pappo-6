@@ -3,10 +3,16 @@ let snap;
 let bounds;
 let pA,pB,pC,pD,pE,pF,line1,line2;
 let enabledPappusLine = new Array(6).fill(true);
+let permIndex = 0;
+let lines = [];
+let pappusLines = [];
+let intersections = [];
+let intersectionTable = {};
 
+// limit x in the range [x0,x1]
 function clamp(x,x0,x1) { return x<x0?x0:x>x1?x1:x; }
 
-// clip line {x1,y1,c2,y2} with a semiplane represented
+// clip line {x1,y1,x2,y2} with a semiplane represented
 // by a point (xa,ya) and a vector(dx,dy)
 function clipByHalfPlane(lineData, xa,ya, dx, dy) {
     if(lineData == null) return null;
@@ -31,6 +37,7 @@ function clipByHalfPlane(lineData, xa,ya, dx, dy) {
     }    
 }
 
+// clip the line {x1,y1,x2,y2} by a rect {x,y,w,h}
 function clipByRect(lineData, rectData) {
     let x1 = rectData.x, y1 = rectData.y;
     let x2 = x1 + rectData.w, y2 = y1 + rectData.h;
@@ -41,6 +48,9 @@ function clipByRect(lineData, rectData) {
     return lineData;
 }
 
+// compute the intersection {x,y} between two lines 
+// (line have the form {x1,y1,x2,y2})
+// return null if the line are (almost) parallel
 function segmentIntersection(s1, s2) {
     let x1=s1.x1, y1=s1.y1, x2=s1.x2, y2=s1.y2;
     let x3=s2.x1, y3=s2.y1, x4=s2.x2, y4=s2.y2;
@@ -52,6 +62,9 @@ function segmentIntersection(s1, s2) {
     }
 }
 
+// update the SVG line representation
+// the new line pass by p1,p2; it is represented by the largest
+// segment in the bounds rect
 function updateLineShape(lineShape, p1, p2) {
     let x1 = p1.x;
     let y1 = p1.y;
@@ -83,6 +96,9 @@ function updateLineShape(lineShape, p1, p2) {
 }
 
 
+//
+// A draggable dot
+// 
 class Dot {
     constructor(x, y) {
         this.x = x;
@@ -135,6 +151,9 @@ class Dot {
     }
 }
 
+//
+// a line with three draggable dots
+//
 class Line {
     constructor(x1,y1,x2,y2) {
         this.dots = [
@@ -228,7 +247,9 @@ class Line {
     }
 }
 
-
+// 
+// get line data ({x1,y1,x2,y2}) from a SVG line
+//
 function getLine(lineShape) {
     return {
         x1:+lineShape.attr('x1'),
@@ -238,24 +259,29 @@ function getLine(lineShape) {
     }
 }
 
-let permIndex = 0;
-let lines = [];
-let pappusLines = [];
-let intersections = [];
-
+//
+// zoom the drawing 
+//
 function zoom(e) {
     e.preventDefault();
     const sc = Math.exp(-e.deltaY*0.001);
     let matrix = Snap.matrix(1,0,0,1,0,0)
-        .scale(sc,sc,e.clientX,e.clientY);
-    transform(matrix)
+        .scale(sc,sc,e.offsetX,e.offsetY);
+    transformAll(matrix)
 }
+
+//
+// pan the drawing
+//
 function pan(e) {
     e.preventDefault();
     let matrix = Snap.matrix(1,0,0,1,e.movementX, e.movementY);
-    transform(matrix);    
+    transformAll(matrix);    
 }
 
+//
+// register event handler for zoom (mouse wheel) & pan (click&drag)
+//
 function handlePanAndZoom(svg) {
     svg.onwheel = zoom;
     svg.onpointerdown = (e) => {
@@ -271,20 +297,50 @@ function handlePanAndZoom(svg) {
     }
 }
 
+//
+// create the six checkboxes and set the related callbacks
+//
+function creteCheckboxes() {
+    let container = document.getElementById('checkboxes');
+    ["ABC","ACB","BAC","BCA","CAB","CBA"].forEach((perm,i) => {
+        let checkbox = document.createElement('input');
+        checkbox.id = checkbox.name = perm;
+        checkbox.type = "checkbox";
+        checkbox.checked = true;
+        container.appendChild(checkbox);
+        let label = document.createElement("label");
+        label.innerHTML = perm;
+        label.for = checkbox;
+        container.appendChild(label);
+
+        checkbox.addEventListener('change', (e) => {
+            enabledPappusLine[i] = e.target.checked;
+            updateAll();
+        });
+    });
+}
+
+//
+// Initialize
+//
 window.addEventListener('DOMContentLoaded', () => {
+    creteCheckboxes();
+
+    // create the Snap controller
     snap = Snap("#svg");
+
     handlePanAndZoom(snap.node);
 
+    // limits
     bounds = {x:0,y:0,w:snap.node.clientWidth,h:snap.node.clientHeight};
+
+    // register resize event listener
     window.addEventListener('resize', ()=> {
         bounds = {x:0,y:0,w:snap.node.clientWidth,h:snap.node.clientHeight};
         updateAll();
     });
 
-
-
-
-    
+    // create the 36 connection lines
     for(let i=0; i<36; i++) {
         let line = snap.line(0,0,10,0).attr({
             stroke:'#ccc',
@@ -293,7 +349,9 @@ window.addEventListener('DOMContentLoaded', () => {
         });
         lines.push(line);
     }
-    for(let i=0; i<9; i++) {
+
+    // create the 6 pappus lines
+    for(let i=0; i<6; i++) {
         let line = snap.line(0,0,10,10).attr({
             stroke:'#A22',
             strokeWidth:1,
@@ -301,6 +359,8 @@ window.addEventListener('DOMContentLoaded', () => {
         });
         pappusLines.push(line);
     }
+
+    // create the 36 small black dots
     for(let i=0; i<36; i++) {
         let pt = snap.circle(0,0,1.5).attr({
             fill:'#000',
@@ -310,6 +370,7 @@ window.addEventListener('DOMContentLoaded', () => {
         intersections.push(pt);
     }
 
+    // the two control lines
     line1 = new Line(100,100,200,400);
     line1.create(snap);
     line1.onChanged.push(updateAll);
@@ -317,16 +378,16 @@ window.addEventListener('DOMContentLoaded', () => {
     line2 = new Line(400,100,300,400);
     line2.create(snap);
     line2.onChanged.push(updateAll);
+
     updateAll();    
 });
 
 
-function updateMidPoint(p,pa,pb) {
-    let t = p.t;
-    p.setPos(pa.x*(1-t)+pb.x*t, pa.y*(1-t)+pb.y*t);
-}
-
-function transform(matrix) {
+// 
+// transform the whole drawing
+// (transform the control lines and then call updateAll())
+//
+function transformAll(matrix) {
     [...line1.dots, ...line2.dots].forEach(dot => {
         dot.setPos(matrix.x(dot.x, dot.y), matrix.y(dot.x,dot.y));
     });
@@ -335,17 +396,23 @@ function transform(matrix) {
     updateAll();
 }
 
-let intersectionTable = {}
     
-
+//
+// update the whole drawing
+//
 function updateAll() {
-        
+    
+    // get the 6 control points
     let pts = [...line1.dots, ...line2.dots]
+
+    // update the 9 connecting lines
     for(let i=0; i<3; i++) {
         for(let j=3; j<6; j++) {
             updateLineShape(lines[i*3+j-3], pts[i], pts[j]);            
         }
     }
+
+    // update the 9*8/2 = 36 intersection points 
     intersectionTable = {}
     let k = 0;
     for(let i=0; i<8; i++) {
@@ -371,29 +438,35 @@ function updateAll() {
         }
     }
 
+    // update the 6 Pappus lines
     let perms = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]];
     for(let i=0;i<6; i++) {
         let perm = perms[i];
+
+        // identify the 6 connection lines involved in the i-th Pappus line
         let L = []; // lines indices
         for(let j=0; j<6; j++) {
             let a = [0,1,1,2,0,2][j];
             let b = perm[[1,0,2,1,2,0][j]];
             L.push(a*3+b);
         }
+
+        // the three intersection points
         let p1 = intersectionTable[L[0]*9+L[1]];
         let p2 = intersectionTable[L[2]*9+L[3]];
         let p3 = intersectionTable[L[4]*9+L[5]];
+        // how many not null intersections?
         let m = (p1!=null?1:0) + (p2!=null?1:0) + (p3!=null?1:0);
-        console.log(m);
+
+        // can draw if the line is enabled and if I have at least two not null points
+        // (I'm not sure the last test is needed)
         if(enabledPappusLine[i] && m>=2) {
             let pa = p1!=null ? p1 : p2;
             let pb = p3!=null ? p3 : p2;
-            console.log(pa,pb)
             if(pa==null || pb==null) console.error(p1,p2,p3);
             updateLineShape(pappusLines[i], pa, pb);
         } else {
             pappusLines[i].attr('visibility','hidden');
         }        
     }
-    
 }
